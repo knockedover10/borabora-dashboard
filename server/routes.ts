@@ -67,6 +67,37 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     res.json(storage.getAllTeamMembers());
   });
 
+  // Dynamically derive team from slides personInCharge field
+  app.get("/api/team/derived", (_req, res) => {
+    const slides = storage.getAllSlides();
+    const nameMap: Record<string, { total: number; completed: number; inProgress: number }> = {};
+
+    for (const slide of slides) {
+      const raw = slide.personInCharge?.trim();
+      if (!raw) continue;
+      // Support comma-separated names on one slide
+      const names = raw.split(/[,/&]+/).map(n => n.trim()).filter(Boolean);
+      for (const name of names) {
+        if (!nameMap[name]) nameMap[name] = { total: 0, completed: 0, inProgress: 0 };
+        nameMap[name].total++;
+        if (slide.status === "completed") nameMap[name].completed++;
+        if (slide.status === "in_progress") nameMap[name].inProgress++;
+      }
+    }
+
+    const team = Object.entries(nameMap).map(([name, stats], idx) => ({
+      id: idx + 1,
+      name,
+      avatarInitials: name.slice(0, 2).toUpperCase(),
+      tasksTotal: stats.total,
+      tasksCompleted: stats.completed,
+      tasksInProgress: stats.inProgress,
+      section: "Luxury Hotel",
+    }));
+
+    res.json(team);
+  });
+
   app.post("/api/team", (req, res) => {
     const parsed = insertTeamMemberSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error });

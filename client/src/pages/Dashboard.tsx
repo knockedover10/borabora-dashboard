@@ -2,13 +2,22 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Milestone, TeamMember } from "@shared/schema";
 import { useEffect } from "react";
-import { Building2, Store, Anchor, Users, TrendingUp, CheckCircle2, Clock, AlertCircle, Plus } from "lucide-react";
+import { Building2, Store, Anchor, Users, TrendingUp, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+
+type DerivedMember = {
+  id: number;
+  name: string;
+  avatarInitials: string;
+  tasksTotal: number;
+  tasksCompleted: number;
+  tasksInProgress: number;
+  section: string;
+};
 
 const statusConfig: Record<string, { label: string; cls: string; icon: any }> = {
   pending:     { label: "Pending",     cls: "status-pending",     icon: Clock },
@@ -61,29 +70,22 @@ export default function Dashboard() {
     queryKey: ["/api/milestones"],
   });
 
-  const { data: team = [], isLoading: teamLoading } = useQuery<TeamMember[]>({
-    queryKey: ["/api/team"],
+  const { data: team = [], isLoading: teamLoading } = useQuery<DerivedMember[]>({
+    queryKey: ["/api/team/derived"],
+    refetchInterval: 5000, // re-derive every 5s so it stays in sync with slide edits
   });
 
-  // Seed on first load
+  // Seed milestones on first load
   const seedMs = useMutation({ mutationFn: () => apiRequest("POST", "/api/milestones/seed"), onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/milestones"] }) });
-  const seedTeam = useMutation({ mutationFn: () => apiRequest("POST", "/api/team/seed"), onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/team"] }) });
 
   useEffect(() => {
     seedMs.mutate();
-    seedTeam.mutate();
   }, []);
 
   const updateMilestone = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Milestone> }) =>
       apiRequest("PATCH", `/api/milestones/${id}`, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/milestones"] }),
-  });
-
-  const updateTeam = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<TeamMember> }) =>
-      apiRequest("PATCH", `/api/team/${id}`, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/team"] }),
   });
 
   // KPI computations
@@ -97,6 +99,7 @@ export default function Dashboard() {
 
   const totalTasks = team.reduce((s, m) => s + m.tasksTotal, 0);
   const doneTasks = team.reduce((s, m) => s + m.tasksCompleted, 0);
+  const inProgressTasks = team.reduce((s, m) => s + (m.tasksInProgress ?? 0), 0);
 
   // Group milestones by section
   const sections = ["Luxury Hotel", "Designer Village", "Yacht Club"];
@@ -207,14 +210,21 @@ export default function Dashboard() {
               <Users size={15} className="text-primary" />
               Team Progress
             </CardTitle>
+            <span className="text-xs text-muted-foreground">Auto-synced from Slide Tracker</span>
           </div>
         </CardHeader>
         <CardContent className="pb-5">
           {teamLoading && <p className="text-xs text-muted-foreground">Loading…</p>}
+          {!teamLoading && team.length === 0 && (
+            <p className="text-xs text-muted-foreground">No names assigned yet — fill in the Person-in-Charge column in the Luxury Hotel slide tracker.</p>
+          )}
           <div className="space-y-4">
             {team.map(member => {
               const pct = member.tasksTotal > 0
                 ? Math.round((member.tasksCompleted / member.tasksTotal) * 100)
+                : 0;
+              const inPrgPct = member.tasksTotal > 0
+                ? Math.round(((member.tasksInProgress ?? 0) / member.tasksTotal) * 100)
                 : 0;
               return (
                 <div key={member.id} data-testid={`team-member-${member.id}`} className="flex items-center gap-4">
@@ -225,36 +235,19 @@ export default function Dashboard() {
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-1">
-                      <div>
+                      <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-foreground">{member.name}</span>
-                        <span className="text-xs text-muted-foreground ml-2">{member.role}</span>
+                        <Badge variant="outline" className="text-xs hidden sm:inline-flex">{member.section}</Badge>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs text-muted-foreground tabular-nums">
-                          <input
-                            type="number" min={0} max={member.tasksTotal}
-                            value={member.tasksCompleted}
-                            onChange={e => updateTeam.mutate({ id: member.id, data: { tasksCompleted: parseInt(e.target.value) || 0 } })}
-                            className="w-8 text-xs tabular-nums text-right bg-transparent border-b border-border focus:outline-none"
-                            data-testid={`team-done-${member.id}`}
-                          />
-                          /
-                          <input
-                            type="number" min={0}
-                            value={member.tasksTotal}
-                            onChange={e => updateTeam.mutate({ id: member.id, data: { tasksTotal: parseInt(e.target.value) || 0 } })}
-                            className="w-8 text-xs tabular-nums bg-transparent border-b border-border focus:outline-none"
-                            data-testid={`team-total-${member.id}`}
-                          />
-                          tasks
-                        </span>
-                        <span className="text-xs font-semibold tabular-nums text-primary w-9 text-right">{pct}%</span>
+                      <div className="flex items-center gap-3 shrink-0 text-xs tabular-nums">
+                        <span className="text-emerald-600 dark:text-emerald-400 font-medium">{member.tasksCompleted} done</span>
+                        <span className="text-blue-500 font-medium">{member.tasksInProgress ?? 0} in progress</span>
+                        <span className="text-muted-foreground">{member.tasksTotal} total</span>
+                        <span className="font-bold text-primary w-9 text-right">{pct}%</span>
                       </div>
                     </div>
-                    <Progress value={pct} className="h-2" />
+                    <Progress value={pct + inPrgPct} className="h-2" />
                   </div>
-                  {/* Section tag */}
-                  <Badge variant="outline" className="text-xs shrink-0 hidden sm:inline-flex">{member.section}</Badge>
                 </div>
               );
             })}
