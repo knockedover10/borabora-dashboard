@@ -191,9 +191,16 @@ export default function Dashboard() {
                       />
                       <span className="text-xs text-muted-foreground">%</span>
                     </div>
-                    {m.dueDate && (
-                      <p className="text-xs text-muted-foreground/70">Due {new Date(m.dueDate).toLocaleDateString("en-SG", { day: "numeric", month: "short", year: "numeric" })}</p>
-                    )}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-xs text-muted-foreground/70">Due</span>
+                      <input
+                        type="date"
+                        value={m.dueDate ?? ""}
+                        onChange={e => updateMilestone.mutate({ id: m.id, data: { dueDate: e.target.value } })}
+                        className="text-xs text-muted-foreground/70 bg-transparent border-b border-border/50 focus:border-primary focus:outline-none cursor-pointer hover:border-primary transition-colors"
+                        data-testid={`milestone-due-${m.id}`}
+                      />
+                    </div>
                   </div>
                 ))}
               </CardContent>

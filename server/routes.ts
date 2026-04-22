@@ -156,18 +156,28 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     res.json({ ok: true });
   });
 
+  const defaultMilestones = [
+    { section: "Luxury Hotel",     title: "Strategic Positioning Study", dueDate: "2026-05-15", status: "in_progress", progressPct: 65 },
+    { section: "Luxury Hotel",     title: "Slide Deck Completion",       dueDate: "2026-06-01", status: "in_progress", progressPct: 10 },
+    { section: "Designer Village", title: "Strategic Positioning Study", dueDate: "2026-07-01", status: "pending",     progressPct: 0  },
+    { section: "Designer Village", title: "Slide Deck Completion",       dueDate: "2026-08-01", status: "pending",     progressPct: 0  },
+    { section: "Yacht Club",       title: "Strategic Positioning Study", dueDate: "2026-07-15", status: "pending",     progressPct: 0  },
+    { section: "Yacht Club",       title: "Slide Deck Completion",       dueDate: "2026-08-15", status: "pending",     progressPct: 0  },
+  ];
+
   app.post("/api/milestones/seed", (_req, res) => {
     const existing = storage.getAllMilestones();
     if (existing.length > 0) return res.json({ seeded: false });
-    const ms = [
-      { section: "Luxury Hotel", title: "Strategic Positioning Study", dueDate: "2026-05-15", status: "in_progress", progressPct: 65 },
-      { section: "Luxury Hotel", title: "Slide Deck Completion", dueDate: "2026-06-01", status: "in_progress", progressPct: 10 },
-      { section: "Luxury Hotel", title: "Operator RFP Issuance", dueDate: "2026-06-30", status: "pending", progressPct: 0 },
-      { section: "Designer Village", title: "Concept Briefing", dueDate: "2026-07-01", status: "pending", progressPct: 0 },
-      { section: "Yacht Club", title: "Marina Feasibility Study", dueDate: "2026-07-15", status: "pending", progressPct: 0 },
-    ];
-    ms.forEach(m => storage.createMilestone(m));
+    defaultMilestones.forEach(m => storage.createMilestone(m));
     res.json({ seeded: true });
+  });
+
+  // Reset milestones to the new default set
+  app.post("/api/milestones/reset", (_req, res) => {
+    const existing = storage.getAllMilestones();
+    existing.forEach(m => storage.deleteMilestone(m.id));
+    defaultMilestones.forEach(m => storage.createMilestone(m));
+    res.json({ reset: true, count: defaultMilestones.length });
   });
 
   return httpServer;
